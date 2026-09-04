@@ -51,7 +51,8 @@ func (s *authService) Register(req RegisterRequest) (*User, error) {
 		return nil, err
 	}
 
-	id, err := s.repo.CreateUser(req.Username, string(hash))
+	role := "employee"
+	id, err := s.repo.CreateUser(req.Username, string(hash), role)
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +60,7 @@ func (s *authService) Register(req RegisterRequest) (*User, error) {
 	return &User{
 		ID:       id,
 		Username: req.Username,
+		Role:     role,
 	}, nil
 }
 
@@ -77,10 +79,13 @@ func (s *authService) Login(req LoginRequest) (string, string, error) {
 		return "", "", errors.New("invalid credentials")
 	}
 
-	claims := jwt.RegisteredClaims{
-		Subject:   strconv.FormatInt(user.ID, 10),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	claims := Claims{
+		Role: user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   strconv.FormatInt(user.ID, 10),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

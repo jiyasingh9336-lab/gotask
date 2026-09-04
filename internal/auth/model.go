@@ -2,13 +2,20 @@ package auth
 
 import (
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type User struct {
 	ID           int64     `json:"id"`
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
+	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+type Claims struct {
+	Role string `json:"role"`
+	jwt.RegisteredClaims
 }
 
 type RegisterRequest struct {

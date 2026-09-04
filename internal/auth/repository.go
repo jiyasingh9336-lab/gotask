@@ -6,7 +6,7 @@ import (
 )
 
 type AuthRepository interface {
-	CreateUser(username string, passwordHash string) (int64, error)
+	CreateUser(username string, passwordHash string, role string) (int64, error)
 	FindByUsername(username string) (*User, error)
 	SaveRefreshToken(userID int64, token string, expires time.Time) error
 	GetRefreshToken(token string) (*RefreshToken, error)
@@ -22,19 +22,19 @@ func NewRepository(db *sql.DB) AuthRepository {
 	return &PostgresAuthRepository{DB: db}
 }
 
-func (r *PostgresAuthRepository) CreateUser(username string, passwordHash string) (int64, error) {
+func (r *PostgresAuthRepository) CreateUser(username string, passwordHash string, role string) (int64, error) {
 	var id int64
-	query := `INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id;`
-	err := r.DB.QueryRow(query, username, passwordHash).Scan(&id)
+	query := `INSERT INTO users (username, password_hash,role) VALUES ($1, $2,$3) RETURNING id;`
+	err := r.DB.QueryRow(query, username, passwordHash, role).Scan(&id)
 	return id, err
 }
 
 func (r *PostgresAuthRepository) FindByUsername(username string) (*User, error) {
-	query := `SELECT id, username, password_hash, created_at FROM users WHERE username = $1`
+	query := `SELECT id, username, password_hash, role, created_at FROM users WHERE username = $1`
 
 	user := &User{}
 	err := r.DB.QueryRow(query, username).Scan(
-		&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt,
+		&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
