@@ -8,7 +8,7 @@ import (
 
 type TaskRepository interface {
 	Create(task *Task) (int64, error)
-	FindAll(offset, limit int, filter TaskFilter) ([]Task, error)
+	FindAll(offset, limit int, filter TaskFilter, userID int64, role string) ([]Task, error)
 	FindById(id int64) (*Task, error)
 	Update(task *Task) error
 	Delete(id int64) error
@@ -26,8 +26,8 @@ func NewRepository(db *sql.DB) TaskRepository {
 func (r *PostgresTaskRepository) Create(task *Task) (int64, error) {
 	var id int64
 
-	query := `INSERT INTO tasks (title, description, completed, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5)
+	query := `INSERT INTO tasks (title, description, completed, created_at, updated_at,created_by,assigned_to)
+            VALUES ($1, $2, $3, $4, $5,$6,$7)
             RETURNING id;
           `
 
@@ -35,7 +35,7 @@ func (r *PostgresTaskRepository) Create(task *Task) (int64, error) {
 	task.CreatedAt = time.Now()
 	task.UpdatedAt = time.Now()
 
-	err := r.DB.QueryRow(query, task.Title, task.Description, task.Completed, task.CreatedAt, task.UpdatedAt).Scan(&id)
+	err := r.DB.QueryRow(query, task.Title, task.Description, task.Completed, task.CreatedAt, task.UpdatedAt, task.CreatedBy, task.AssignedTo).Scan(&id)
 
 	if err != nil {
 		return 0, err
@@ -45,7 +45,7 @@ func (r *PostgresTaskRepository) Create(task *Task) (int64, error) {
 	return id, nil
 }
 
-func (r *PostgresTaskRepository) FindAll(offset, limit int, filter TaskFilter) ([]Task, error) {
+func (r *PostgresTaskRepository) FindAll(offset, limit int, filter TaskFilter, userID int64, role string) ([]Task, error) {
 	if filter.SortBy == "" {
 		filter.SortBy = "id"
 	}
@@ -54,19 +54,37 @@ func (r *PostgresTaskRepository) FindAll(offset, limit int, filter TaskFilter) (
 	}
 
 	validSortFields := map[string]bool{
-		"id": true, "title": true, "created_at": true, "updated_at": true,
+		"id": true, "title": true, "created_at": true, "updated_at": true, "created_by": true, "assigned_to": true, "completed": true,
 	}
 	if !validSortFields[filter.SortBy] {
 		filter.SortBy = "id"
 	}
-	query := `
-          SELECT id, title, description, completed, created_at, updated_at
-          FROM tasks
-          WHERE ($1::bool IS NULL OR completed = $1)
-          ORDER BY ` + filter.SortBy + ` ` + filter.Order + `
-          LIMIT $2 OFFSET $3;`
 
-	rows, err := r.DB.Query(query, filter.Completed, limit, offset)
+	var query string
+	var rows *sql.Rows
+	var err error
+
+	if role == "employee" {
+		query = `
+		SELECT id, title, description, completed, created_at, updated_at, created_by, assigned_to
+		FROM tasks
+		WHERE ($1::bool IS NULL OR completed = $1)
+		AND assigned_to = $2
+		ORDER BY ` + filter.SortBy + ` ` + filter.Order + `
+		LIMIT $3 OFFSET $4;`
+
+		rows, err = r.DB.Query(query, filter.Completed, userID, limit, offset)
+
+	} else {
+		query = `
+		SELECT id, title, description, completed, created_at, updated_at, created_by, assigned_to
+		FROM tasks
+		WHERE ($1::bool IS NULL OR completed = $1)
+		ORDER BY ` + filter.SortBy + ` ` + filter.Order + `
+		LIMIT $2 OFFSET $3;`
+
+		rows, err = r.DB.Query(query, filter.Completed, limit, offset)
+	}
 
 	if err != nil {
 		return nil, err
@@ -76,7 +94,7 @@ func (r *PostgresTaskRepository) FindAll(offset, limit int, filter TaskFilter) (
 
 	for rows.Next() {
 		task := Task{}
-		if err := rows.Scan(&task.Id, &task.Title, &task.Description, &task.Completed, &task.CreatedAt, &task.UpdatedAt); err != nil {
+		if err := rows.Scan(&task.Id, &task.Title, &task.Description, &task.Completed, &task.CreatedAt, &task.UpdatedAt, &task.CreatedBy, &task.AssignedTo); err != nil {
 			return nil, err
 		}
 		tasks = append(tasks, task)
@@ -90,10 +108,10 @@ func (r *PostgresTaskRepository) FindAll(offset, limit int, filter TaskFilter) (
 }
 
 func (r *PostgresTaskRepository) FindById(id int64) (*Task, error) {
-	query := `SELECT id, title, description, completed, created_at, updated_at FROM tasks WHERE id = $1;`
+	query := `SELECT id, title, description, completed, created_at, updated_at,created_by,assigned_to FROM tasks WHERE id = $1;`
 
 	task := Task{}
-	err := r.DB.QueryRow(query, id).Scan(&task.Id, &task.Title, &task.Description, &task.Completed, &task.CreatedAt, &task.UpdatedAt)
+	err := r.DB.QueryRow(query, id).Scan(&task.Id, &task.Title, &task.Description, &task.Completed, &task.CreatedAt, &task.UpdatedAt, &task.CreatedBy, &task.AssignedTo)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -107,12 +125,12 @@ func (r *PostgresTaskRepository) FindById(id int64) (*Task, error) {
 
 func (r *PostgresTaskRepository) Update(task *Task) error {
 	query := `UPDATE tasks
-            SET title = $1, description = $2, completed = $3, updated_at = $4
+            SET title = $1, description = $2, completed = $3, updated_at = $4, assigned_to = $6
             WHERE id = $5;
           `
 
 	task.UpdatedAt = time.Now()
-	res, err := r.DB.Exec(query, task.Title, task.Description, task.Completed, task.UpdatedAt, task.Id)
+	res, err := r.DB.Exec(query, task.Title, task.Description, task.Completed, task.UpdatedAt, task.AssignedTo, task.Id)
 
 	if err != nil {
 		return err

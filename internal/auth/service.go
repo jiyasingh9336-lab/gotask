@@ -114,11 +114,22 @@ func (s *authService) Refresh(refreshToken string) (string, error) {
 		return "", errors.New("refresh token expired or revoked")
 	}
 
+	user, err := s.repo.FindByID(rt.UserID)
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", errors.New("user not found")
+	}
+
 	// Create new access token
-	claims := jwt.RegisteredClaims{
-		Subject:   strconv.FormatInt(rt.UserID, 10),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	claims := Claims{
+		Role: user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   strconv.FormatInt(rt.UserID, 10),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

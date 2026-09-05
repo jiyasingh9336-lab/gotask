@@ -1,6 +1,7 @@
 package task
 
 import (
+	"errors"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -10,11 +11,11 @@ import (
 var validate = validator.New()
 
 type TaskService interface {
-	Create(req CreateTaskRequest) (*TaskResponse, error)
-	GetAll(page, limit int, filter TaskFilter) ([]TaskResponse, int64, int, error)
-	GetById(id int64) (*TaskResponse, error)
-	Update(id int64, req UpdateTaskRequest) error
-	Delete(id int64) error
+	Create(req CreateTaskRequest, userID int64, role string) (*TaskResponse, error)
+	GetAll(page, limit int, filter TaskFilter, userID int64, role string) ([]TaskResponse, int64, int, error)
+	GetById(id int64, userID int64, role string) (*TaskResponse, error)
+	Update(id int64, req UpdateTaskRequest, userID int64, role string) error
+	Delete(id int64, userID int64, role string) error
 }
 
 type taskService struct {
@@ -31,13 +32,19 @@ func mapTasktoResponse(task *Task) TaskResponse {
 		Title:       task.Title,
 		Description: task.Description,
 		Completed:   task.Completed,
+		CreatedBy:   task.CreatedBy,
+		AssignedTo:  task.AssignedTo,
 		CreatedAt:   task.CreatedAt,
 		UpdatedAt:   task.UpdatedAt,
 	}
 	return res
 }
 
-func (s *taskService) Create(req CreateTaskRequest) (*TaskResponse, error) {
+func (s *taskService) Create(req CreateTaskRequest, userID int64, role string) (*TaskResponse, error) {
+	if role == "employee" {
+		return nil, errors.New("you are not allowed to create tasks")
+	}
+
 	if err := validate.Struct(req); err != nil {
 		return nil, validation.FormatValidationError(err)
 	}
@@ -46,6 +53,8 @@ func (s *taskService) Create(req CreateTaskRequest) (*TaskResponse, error) {
 		Title:       req.Title,
 		Description: req.Description,
 		Completed:   false,
+		CreatedBy:   userID,
+		AssignedTo:  req.AssignedTo,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -60,10 +69,10 @@ func (s *taskService) Create(req CreateTaskRequest) (*TaskResponse, error) {
 	return &res, nil
 }
 
-func (s *taskService) GetAll(page, limit int, filter TaskFilter) ([]TaskResponse, int64, int, error) {
+func (s *taskService) GetAll(page, limit int, filter TaskFilter, userID int64, role string) ([]TaskResponse, int64, int, error) {
 	offset := (page - 1) * limit
 
-	tasks, err := s.repo.FindAll(offset, limit, filter)
+	tasks, err := s.repo.FindAll(offset, limit, filter, userID, role)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -96,7 +105,7 @@ func (s *taskService) GetAll(page, limit int, filter TaskFilter) ([]TaskResponse
 	return responses, total, totalPages, nil
 }
 
-func (s *taskService) GetById(id int64) (*TaskResponse, error) {
+func (s *taskService) GetById(id int64, userID int64, role string) (*TaskResponse, error) {
 	if id <= 0 {
 		return nil, ErrInvalidID
 	}
@@ -110,11 +119,15 @@ func (s *taskService) GetById(id int64) (*TaskResponse, error) {
 		return nil, ErrNotFound
 	}
 
+	if role == "employee" && task.AssignedTo != userID {
+		return nil, ErrNotFound
+	}
+
 	res := mapTasktoResponse(task)
 	return &res, nil
 }
 
-func (s *taskService) Update(id int64, req UpdateTaskRequest) error {
+func (s *taskService) Update(id int64, req UpdateTaskRequest, userID int64, role string) error {
 	if id <= 0 {
 		return ErrInvalidID
 	}
@@ -131,6 +144,19 @@ func (s *taskService) Update(id int64, req UpdateTaskRequest) error {
 	if task == nil {
 		return ErrNotFound
 	}
+
+	if role == "employee" {
+		if task.AssignedTo != userID {
+			return ErrNotFound
+		}
+
+		if req.Completed != nil {
+			task.Completed = *req.Completed
+		}
+
+		return s.repo.Update(task)
+	}
+
 	if req.Title != nil {
 		task.Title = *req.Title
 	}
@@ -140,12 +166,15 @@ func (s *taskService) Update(id int64, req UpdateTaskRequest) error {
 	if req.Completed != nil {
 		task.Completed = *req.Completed
 	}
+	if req.AssignedTo != nil {
+		task.AssignedTo = *req.AssignedTo
+	}
 
 	task.UpdatedAt = time.Now()
 	return s.repo.Update(task)
 }
 
-func (s *taskService) Delete(id int64) error {
+func (s *taskService) Delete(id int64, userID int64, role string) error {
 	if id <= 0 {
 		return ErrInvalidID
 	}
@@ -153,8 +182,13 @@ func (s *taskService) Delete(id int64) error {
 	if err != nil {
 		return err
 	}
+
 	if task == nil {
 		return ErrNotFound
+	}
+
+	if role == "employee" {
+		return errors.New("you are not allowed to delete tasks")
 	}
 	return s.repo.Delete(id)
 

@@ -8,3 +8,11 @@ func GetUserID(r *http.Request) int64 {
 	}
 	return 0
 }
+
+func GetUserRole(r *http.Request) string {
+	if role, ok := r.Context().Value("role").(string); ok {
+		return role
+	}
+
+	return ""
+}

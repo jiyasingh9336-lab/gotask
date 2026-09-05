@@ -8,6 +8,7 @@ import (
 type AuthRepository interface {
 	CreateUser(username string, passwordHash string, role string) (int64, error)
 	FindByUsername(username string) (*User, error)
+	FindByID(id int64) (*User, error)
 	SaveRefreshToken(userID int64, token string, expires time.Time) error
 	GetRefreshToken(token string) (*RefreshToken, error)
 	RevokeRefreshToken(token string) error
@@ -40,6 +41,28 @@ func (r *PostgresAuthRepository) FindByUsername(username string) (*User, error) 
 		return nil, nil
 	}
 	return user, nil
+}
+
+func (r *PostgresAuthRepository) FindByID(id int64) (*User, error) {
+	query := `SELECT id, username, password_hash, role, created_at 
+			  FROM users 
+			  WHERE id = $1`
+
+	user := &User{}
+
+	err := r.DB.QueryRow(query, id).Scan(
+		&user.ID,
+		&user.Username,
+		&user.PasswordHash,
+		&user.Role,
+		&user.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	return user, err
 }
 
 func (r *PostgresAuthRepository) SaveRefreshToken(userID int64, token string, expires time.Time) error {

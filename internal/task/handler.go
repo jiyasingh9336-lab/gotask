@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sudarshanmg/gotask/internal/auth"
 	"github.com/sudarshanmg/gotask/pkg/response"
 )
 
@@ -28,7 +29,15 @@ func (s *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := s.service.Create(req)
+	userID := auth.GetUserID(r)
+	role := auth.GetUserRole(r)
+
+	if userID == 0 {
+		response.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	task, err := s.service.Create(req, userID, role)
 	if err != nil {
 		response.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -68,7 +77,15 @@ func (s *Handler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
 		limit = 10
 	}
 
-	tasks, total, totalPages, err := s.service.GetAll(page, limit, filter)
+	userID := auth.GetUserID(r)
+	role := auth.GetUserRole(r)
+
+	if userID == 0 || role == "" {
+		response.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tasks, total, totalPages, err := s.service.GetAll(page, limit, filter, userID, role)
 	if err != nil {
 		response.WriteError(w, http.StatusInternalServerError, "failed to fetch tasks")
 		return
@@ -90,7 +107,10 @@ func (s *Handler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := s.service.GetById(id)
+	userID := auth.GetUserID(r)
+	role := auth.GetUserRole(r)
+
+	task, err := s.service.GetById(id, userID, role)
 	if errors.Is(err, ErrInvalidID) {
 		response.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -123,7 +143,10 @@ func (s *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.service.Update(id, req)
+	userID := auth.GetUserID(r)
+	role := auth.GetUserRole(r)
+
+	err = s.service.Update(id, req, userID, role)
 	if errors.Is(err, ErrInvalidID) {
 		response.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -149,7 +172,11 @@ func (s *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.service.Delete(id)
+	userID := auth.GetUserID(r)
+	role := auth.GetUserRole(r)
+
+	err = s.service.Delete(id, userID, role)
+
 	if errors.Is(err, ErrInvalidID) {
 		response.WriteError(w, http.StatusBadRequest, err.Error())
 		return

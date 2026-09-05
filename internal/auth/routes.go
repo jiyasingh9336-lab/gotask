@@ -7,5 +7,4 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 	r.Post("/auth/login", h.Login)
 	r.Post("/auth/refresh", h.Refresh)
 	r.Post("/auth/logout", h.Logout)
-	r.Post("/auth/logout-all", h.LogoutAll)
 }

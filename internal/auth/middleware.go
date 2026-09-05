@@ -22,7 +22,8 @@ func AuthMiddleware(secret string) func(http.Handler) http.Handler {
 
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
-			claims := &jwt.RegisteredClaims{}
+			claims := &Claims{}
+
 			token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, fmt.Errorf("unexpected signing method")
@@ -40,8 +41,11 @@ func AuthMiddleware(secret string) func(http.Handler) http.Handler {
 				response.WriteError(w, http.StatusUnauthorized, "invalid subject claim")
 				return
 			}
+			role := claims.Role
 
 			ctx := context.WithValue(r.Context(), "userID", userID)
+			ctx = context.WithValue(ctx, "role", role)
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

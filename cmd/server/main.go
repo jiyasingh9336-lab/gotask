@@ -41,6 +41,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.AuthMiddleware(cfg.JWTSecret))
 		task.RegisterRoutes(r, taskHandler)
+		r.Post("/auth/logout-all", authHandler.LogoutAll)
 	})
 
 	log.Printf("Server is listening on port %s...\n", cfg.Port)
